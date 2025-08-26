@@ -1,0 +1,212 @@
+--- 
+title: "Seasonal Movement Paths"
+format: dashboard
+server: shiny
+---
+
+```{r}
+#| context: setup
+library(sf)
+library(bslib)
+library(terra)
+library(leaflet)
+library(tidyverse)
+options(shiny.maxRequestSize=100*1024^2) 
+#rs <- rast("spring migration.tif")
+#rs_max <- max(values(rs), na.rm=TRUE)
+#rf <- rast("fall migration.tif")
+#rf_max <- max(values(rf), na.rm=TRUE)
+```
+
+## {.sidebar}
+
+**Upload data**
+
+```{r}
+fileInput("gpkg", "Movement paths (gpkg):", accept=".gpkg")
+fileInput("tif1", "Spring corridor (tif):", accept=".tif")
+fileInput("tif2", "Fall corridor (tif):", accept=".tif")
+hr()
+selectInput("herd", "Herd name:", choices=c("Little_Rancheria","Wolf_Lake"))
+selectInput("id", "Caribou:", choices=NULL)
+selectInput("season", "Season:", choices=c("Spring migration", "Fall migration"))
+hr()
+#sliderInput("alpha", "Opacity:", min=0, max=1, value=0.5, step=0.1)
+#sliderInput("size", "Point size:", min=0, max=10, value=3, step=1)
+sliderInput("clamp", "Reclass Collar IDs:", min=1, max=15, value=1, step=1)
+hr()
+```
+
+**Legend:**
+
+Boundary: Study boundary defined by KDE estimation across all individuals and years.
+
+GPS: All relocations within movement paths for selected caribou.
+
+Path: Annual movement paths for selected caribou.
+
+Collar IDs: Number of individual caribou moving across a pixel.
+
+## Column {width=60%}
+
+```{r}
+#| title: Mapview
+leafletOutput("map")
+```
+
+```{r}
+#| context: server
+bnd <- eventReactive(input$gpkg, {
+  req(input$gpkg)
+  st_read(input$gpkg$datapath, "aoi", quiet=TRUE)
+})
+
+ipaths <- eventReactive(input$gpkg, {
+  req(input$gpkg)
+  st_read(input$gpkg$datapath, "paths", quiet=TRUE) |>
+    mutate(level = as.factor(level), year = as.factor(year))
+})
+
+igps <- eventReactive(input$gpkg, {
+  req(input$gpkg)
+  st_read(input$gpkg$datapath, "gps", quiet=TRUE) |>
+    mutate(year = as.factor(year))
+})
+
+observeEvent(input$gpkg, {
+  ids <- as.character(sort(unique(ipaths()$id)))
+  updateSelectInput(session, "id", choices=ids, selected=ids[2])
+})
+
+gps1 <- reactive({
+  igps() |> filter(id==input$id & season==input$season)
+})
+
+rs <- eventReactive(input$tif1, {
+  req(input$tif1)
+  rast(input$tif1$datapath)
+})
+
+rf <- eventReactive(input$tif2, {
+  req(input$tif2)
+  rast(input$tif2$datapath)
+})
+
+pop_grid <- reactive({
+  req(input$tif1)
+  req(input$tif2)
+  if (input$season=="Spring migration") {
+    rs_max <- max(values(rs()), na.rm=TRUE)
+    r <- clamp(rs(), input$clamp, rs_max)
+  } else if (input$season=="Fall migration") {
+    rf_max <- max(values(rf()), na.rm=TRUE)
+    r <- clamp(rf(), input$clamp, rf_max)
+  }
+})
+
+# Initialize map
+output$map <- renderLeaflet({
+  req(bnd())
+  leaflet(bnd(), options = leafletOptions(attributionControl=FALSE)) |>
+    addProviderTiles("Esri.WorldImagery", group="Esri.WorldImagery") |>
+    addProviderTiles("Esri.WorldGrayCanvas", group="Esri.WorldGrayCanvas") |>
+    addProviderTiles("Esri.WorldTopoMap", group="Esri.WorldTopoMap") |>
+    addPolygons(fillOpacity=0, stroke=TRUE, color="black", weight=2, group="Boundary") |>
+    addLayersControl(position = "bottomright",
+      baseGroups=c("Esri.WorldTopoMap","Esri.WorldImagery","Esri.WorldGrayCanvas"),
+      overlayGroups = c("Boundary", "Paths", "Collar IDs"),
+      options = layersControlOptions(collapsed = FALSE)) |>
+    hideGroup("")
+})
+
+# Update layers
+observe({
+  req(ipaths())
+  r <- pop_grid()
+  pal <- colorNumeric(palette = "viridis", domain = values(r), na.color = "transparent")
+  path1 <- ipaths() |> filter(id==input$id, season==input$season)
+  groups <- NULL
+  m <- leafletProxy("map") |>
+    #clearGroup("GPS") |>
+    #clearGroup("Paths") |>
+    clearGroup("Collar IDs") #|>
+    #addCircles(data = gps1(), color="red", fill="red", weight=input$size, radius=1, group="GPS")
+  for (i in unique(path1$year)) {
+    yr1 <- path1 |> filter(year==i)
+    gp1 <- gps1() |> filter(year==i)
+    m <- m |> addPolygons(data=yr1, stroke=TRUE, color="black", weight=2, fillOpacity=0, group=paste0("Path ",i)) |>
+      addCircles(data = gp1, color="red", fill="red", weight=3, radius=1, group=paste0("GPS ",i))
+    groups <- c(groups, paste0("Path ",i), paste0("GPS ",i))
+  }
+  m <- m |> addRasterImage(r, colors = pal, opacity = 0.8, project = TRUE, group="Collar IDs") |>
+    #addRasterLegend(r, opacity = 0.75) |> # requires categorical values with own color table 
+    #addLegend(pal = pal, values = values(r), title = "Collar IDs", position = "bottomright") |>
+    addLayersControl(position = "bottomright",
+      baseGroups=c("Esri.WorldTopoMap","Esri.WorldImagery","Esri.WorldGrayCanvas"),
+      overlayGroups = c("Boundary", groups, "Collar IDs"),
+      options = layersControlOptions(collapsed = FALSE)) |>
+    hideGroup(groups)
+  m
+})
+```
+
+## Column {width=40%}
+
+### Row - two {height="25%"}
+
+```{r}
+#| title: Summary stats
+verbatimTextOutput("text")
+```
+
+### Row - three {height="35%"}
+
+```{r}
+#| title: Area by year
+tableOutput("tab")
+```
+
+### Row - one {.tabset height="40%"}
+
+```{r}
+#| title: Area over time
+plotOutput("plot")
+```
+
+```{r}
+#| context: server
+output$text <- renderPrint({
+  x <- gps1()
+  min_date <- as.character(date(min(x$timestamp)))
+  max_date <- as.character(date(max(x$timestamp)))
+  n <- nrow(x)
+  cat("Caribou:", input$id, "\n")
+  cat("Season:", input$season, "\n")
+  cat("Start date:", min_date, "\n")
+  cat("End date:", max_date, "\n")
+  cat("Relocations:")
+  table(x$year)
+})
+
+range_subset <- reactive({
+  ipaths() |> st_drop_geometry() |>
+    select(id, level, season, year, area_km2) |>
+    filter(id==input$id, season==input$season) |>
+    mutate(id=as.integer(id))
+})
+
+output$tab <- renderTable({
+  range_subset()
+})
+
+output$plot <- renderPlot({
+  z <- ipaths() |> filter(id==input$id, season==input$season)
+  p <- ggplot(z, aes(x = year, y = area_km2, group = id, color = id)) +
+    geom_line() +
+    geom_point(size = 1.5) +
+    labs(title = paste0("Caribou: ",input$id,"\nSeason: ",input$season), x = "Year", y = "Area (km2)") +
+    theme_minimal() +
+    theme(legend.position = "none")
+  p
+})
+```
