@@ -1,5 +1,5 @@
 --- 
-title: "Seasonal Migration Periods"
+title: "Movement Mapper"
 format: dashboard
 server: shiny
 ---
@@ -20,7 +20,8 @@ options(shiny.maxRequestSize=100*1024^2)
 
 ```{r}
 fileInput("csv1", "Movement data (csv):", accept=".csv")
-fileInput("csv2", "Migration data (csv):", accept=".csv")
+fileInput("csv2", "Segments table (csv):", accept=".csv")
+checkboxInput("no_segments", "Create initial segments table", value = FALSE)
 hr()
 selectInput("id", "Select caribou:", choices=NULL)
 selectInput("year", "Select year:", choices=NULL)
