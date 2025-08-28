@@ -22,6 +22,7 @@ options(shiny.maxRequestSize=100*1024^2)
 fileInput("csv1", "Movement data (csv):", accept=".csv")
 fileInput("csv2", "Migration data (csv):", accept=".csv")
 hr()
+selectInput("herd", "Herd name:", choices=c("Little_Rancheria","Wolf_Lake"))
 selectInput("id", "Select caribou:", choices=NULL)
 selectInput("year", "Select year:", choices=NULL)
 textInput("spring_notes", "Spring notes:", value=NULL)
@@ -36,12 +37,7 @@ The two plots on the right show the relationship between NSD and "Day of year". 
 ```{r}
 hr()
 actionButton("log", "Save segments")
-br()
-hr()
-downloadButton("save", "Download final segments")
 ```
-
-# Plots {orientation="columns" scrolling="true"}
 
 ## Column {width=30%}
 
@@ -68,23 +64,15 @@ observeEvent(input$csv1, {
   updateSelectInput(session, "year", choices=yrs, selected=yrs[1])
 })
 
-
 gps <- eventReactive(input$csv1, {
   req(input$csv1)
   read_csv(input$csv1$datapath) |>
     mutate(year = year(timestamp), yday=yday(timestamp)) # |> filter(id %in% 43140:43146)
 })
 
-segments_rv <- reactiveVal(NULL)
-
 mig <- eventReactive(input$csv2, {
   req(input$csv2)
   read_csv(input$csv2$datapath)
-})
-
-# Initialize segments when upload happens
-observeEvent(mig(), {
-  segments_rv(mig())
 })
 
 observe({
@@ -223,46 +211,20 @@ output$tab1b <- renderTable({
   }
 })
 
-observeEvent(input$log, {
-  req(segments_rv())
-  dat <- segments_rv()
-  #browser()
-  # Decide Start/End values based on checkboxes
-  start_spring <- if (isTRUE(input$use_spring)) oneRow()[1] else NA_character_
-  end_spring   <- if (isTRUE(input$use_spring)) oneRow()[2] else NA_character_
-  start_fall   <- if (isTRUE(input$use_fall)) oneRow()[3] else NA_character_
-  end_fall     <- if (isTRUE(input$use_fall)) oneRow()[4] else NA_character_
-  
-  new_entries <- tibble::tibble(
-    Id        = as.numeric(input$id),
-    Year      = as.numeric(input$year),
-    Migration = c("Spring", "Fall"),
-    Start     = c(start_spring, start_fall),
-    End       = c(end_spring, end_fall),
-    Notes      = c(
-      ifelse(input$spring_notes == "", NA_character_, input$spring_notes),
-      ifelse(input$fall_notes == "", NA_character_, input$fall_notes)
-    )
-  )
-
-  # Update existing rows or append
-  segments_rv(dplyr::rows_update(
-    dat,
-    new_entries,
-    by = c("Id", "Year", "Migration")
-  ))
-})
-
-# download the *latest* tibble
-output$save <- downloadHandler(
-  filename = function() {
-    paste0("migration_segments_", Sys.Date(), ".csv")
-  },
-  content = function(file) {
-    req(segments_rv())
-    write_csv(segments_rv(), file)
+observeEvent(input$log,{
+  if (!is.null(input$csv1)) {
+    fo <- paste0(tolower(input$herd),"/migration_segments_",Sys.Date(),".csv")
+    log_entry <- paste0(
+      input$id,",",input$year,",Spring,", oneRow()[1], ",", oneRow()[2], "\n",
+      input$id,",",input$year,",Fall,", oneRow()[3], ",", oneRow()[4])
+    if (!file.exists(fo)) {
+      write("Id,Year,Migration,Start,End", file = fo)
+      write(log_entry, file = fo, append = TRUE)
+    } else {
+      write(log_entry, file = fo, append = TRUE)
+    }
   }
-)
+})
 ```
 
 ## Column {width=70%}
@@ -270,16 +232,14 @@ output$save <- downloadHandler(
 ### Row {height="50%"}
 
 ```{r}
-checkboxInput("use_spring", "Spring migration:", value = TRUE)
-sliderInput("spring", " ", min=1, max=365, value=c(91,181), step=1, width="100%")
+sliderInput("spring", "Spring migration:", min=1, max=365, value=c(91,181), step=1, width="100%")
 plotOutput("plotSpring")
 ```
 
 ### Row {height="50%"}
 
 ```{r}
-checkboxInput("use_fall", "Fall migration:", value = TRUE)
-sliderInput("fall", " ", min=1, max=365, value=c(244,304), step=1, width="100%")
+sliderInput("fall", "Fall migration:", min=1, max=365, value=c(244,304), step=1, width="100%")
 plotOutput("plotFall")
 ```
 
@@ -311,31 +271,3 @@ ggplot(trk_select()) +
   labs(x = "Day of year", y = "NSD")
 })
 ```
-
-# Tables
-
-## Column {width=50%}
-
-```{r}
-#| context: server
-output$tab1 <- renderTable({
-  mig()
-})
-
-output$tab2 <- renderTable({
-  segments_rv()
-})
-```
-
-```{r}
-#| title: Original
-tableOutput("tab1")
-```
-
-```{r}
-#| title: Revised
-tableOutput("tab2")
-```
-
-
-
