@@ -222,35 +222,6 @@ output$tab1b <- renderTable({
   }
 })
 
-observeEvent(input$log2, {
-  req(segments_rv())
-  dat <- segments_rv()
-  
-  new_entries <- tibble::tibble(
-    Id        = as.numeric(input$id),
-    Year      = as.numeric(input$year),
-    Migration = c("Spring", "Fall"),
-    Start     = c(oneRow()[1], oneRow()[3]),
-    End       = c(oneRow()[2], oneRow()[4]),
-    Note      = c(ifelse(input$spring_notes == "", NA_character_, input$spring_notes),
-                  ifelse(input$fall_notes == "", NA_character_, input$fall_notes)
-                )
-  )
-
-  for (i in seq_len(nrow(new_entries))) {
-    idx <- which(dat$Id == new_entries$Id[i] &
-                 dat$Year == new_entries$Year[i] &
-                 dat$Migration == new_entries$Migration[i])
-    if (length(idx) > 0) {
-      dat[idx, ] <- new_entries[i, ]
-    } else {
-      dat <- dplyr::bind_rows(dat, new_entries[i, ])
-    }
-  }
-
-  segments_rv(dat)
-})
-
 observeEvent(input$log, {
   req(segments_rv())
   dat <- segments_rv()
