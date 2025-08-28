@@ -253,7 +253,10 @@ observeEvent(input$log, {
     by = c("Id", "Year", "Migration")
   ))
 })
+```
 
+```{r}
+#| context: server
 # download the *latest* tibble
 output$save <- downloadHandler(
   filename = function() {
