@@ -26,6 +26,7 @@ checkboxInput("no_segments", "Create initial segments table", value = FALSE)
 hr()
 selectInput("id", "Select caribou:", choices=NULL)
 selectInput("year", "Select year:", choices=NULL)
+checkboxInput("extend", "Extend fall season into next year", value = FALSE)
 textInput("spring_notes", "Spring notes:", value=NULL)
 textInput("fall_notes", "Fall notes:", value=NULL)
 hr()
@@ -114,24 +115,52 @@ observe({
   updateSliderInput(session, "fall", min=1, max=365, value=c(start_fall,end_fall), step=1)
 })
 
+observeEvent(input$extend, {
+  start_spring <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
+  end_spring <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
+  start_fall <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
+  end_fall <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
+  updateSliderInput(session, "spring", min=1, max=426, value=c(start_spring,end_spring), step=1)
+  updateSliderInput(session, "fall", min=1, max=426, value=c(start_fall,end_fall), step=1)
+})
+
 trk <- eventReactive(input$csv1, {
   gps() |>
     make_track(.x=longitude, .y=latitude, .t=timestamp, id=id, longitude=longitude, 
-      latitude=latitude, elevation=elevation, year=year, yday=yday, crs = 4326)
+      latitude=latitude, elevation=elevation, year=year, yday=yday, crs = 4326) 
 })
 
 Boundary <- eventReactive(input$csv1, {
   hr_kde(trk(), levels=0.9999) |> hr_isopleths()
 })
 
-trk_select <- reactive({
+trk_select2 <- reactive({
+  req(input$year)
   trk <- trk() |> filter(id==input$id, year==input$year)
   trk |> mutate(nsd=nsd(trk))
 })
 
-last_day <- reactive({
-  yday(paste0(input$year, "-12-31"))
+trk_select <- reactive({
+  req(input$year)
+  if (input$extend) {
+    # keep selected year + next year
+    trk <- trk() |> 
+      filter(id==input$id, year %in% c(as.numeric(input$year), as.numeric(input$year) + 1))
+  } else {
+    # keep only selected year
+    trk <- trk() |> 
+      filter(id==input$id, year == input$year)
+  }
+
+  trk <- trk |> 
+    arrange("t_") |> 
+    mutate(plot_yday = ifelse(year != input$year, yday + 365, yday)) |> 
+      filter(plot_yday < 427)
+  trk <- trk |> mutate(nsd=nsd(trk))
+  trk
 })
+
+last_day <- reactive(ifelse(input$extend, 426, 365))
 
 # Initialize spring map 
 output$map1 <- renderLeaflet({
@@ -152,7 +181,7 @@ output$map1 <- renderLeaflet({
 observe({
   req(trk_select())
   lines <- trk_select()
-  spring <- lines |> filter(yday >= input$spring[1] & yday <= input$spring[2])
+  spring <- lines |> filter(plot_yday >= input$spring[1] & plot_yday <= input$spring[2])
   leafletProxy("map1") |>
     clearGroup("GPS") |>
     clearGroup("GPS Spring") |>
@@ -182,7 +211,7 @@ output$map2 <- renderLeaflet({
 observe({
   req(trk_select())
   lines <- trk_select()
-  fall   <- lines |> filter(yday >= input$fall[1] & yday <= input$fall[2])
+  fall   <- lines |> filter(plot_yday >= input$fall[1] & plot_yday <= input$fall[2])
   leafletProxy("map2") |>
     clearGroup("GPS") |>
     clearGroup("GPS Fall") |>
@@ -290,7 +319,7 @@ plotOutput("plotFall")
 
 ```{r}
 #| context: server
-output$plotSpring <- renderPlot({
+output$plotSpring1 <- renderPlot({
 ggplot(trk_select()) +
   aes(y = nsd, x = yday, fill = year, text = id) +
   geom_point(size = 1) + 
@@ -303,9 +332,22 @@ ggplot(trk_select()) +
   labs(x = "Day of year", y = "NSD")
 })
 
+output$plotSpring <- renderPlot({
+  ggplot(trk_select()) +
+    aes(y = nsd, x = plot_yday, fill = year, text = id) +
+    geom_point(size = 1) + 
+    geom_path(color = "black") +
+    geom_vline(xintercept = input$spring[1], color = "red", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = input$spring[2], color = "red", linetype = "dashed", size = 1) +
+    scale_fill_viridis_c("Year") +
+    scale_x_continuous(limits = c(1, last_day())) +
+    theme(legend.position = "none") +
+    labs(x = "Day of year (extended)", y = "NSD")
+})
+
 output$plotFall <- renderPlot({
 ggplot(trk_select()) +
-  aes(y = nsd, x = yday, fill = year, text = id) +
+  aes(y = nsd, x = plot_yday, fill = year, text = id) +
   geom_point(size = 1) + 
   geom_path(color="black") +
   geom_vline(xintercept = input$fall[1], color = "red", linetype = "dashed", size = 1) +
