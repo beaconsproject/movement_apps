@@ -371,7 +371,10 @@ output$tab1 <- renderDataTable({
   req(mig(), segments_rv())
 
   df1 <- mig() |> 
-    mutate(Id = as.integer(Id), Year = as.integer(Year)) |> 
+    mutate(Id = as.integer(Id), 
+           Year = as.integer(Year),
+           Start = ifelse(is.na(Start), "NA", Start),
+           End = ifelse(is.na(End), "NA", End)) |> 
     mutate(` ` = row_number()) |>
     select(` `, everything())
   
@@ -387,7 +390,10 @@ output$tab1 <- renderDataTable({
   }
   
   df2 <- segments_rv() |> 
-    mutate(Id = as.integer(Id), Year = as.integer(Year)) |> 
+    mutate(Id = as.integer(Id), 
+           Year = as.integer(Year),
+           Start = ifelse(is.na(Start), "NA", Start),
+           End = ifelse(is.na(End), "NA", End)) |> 
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
@@ -395,11 +401,12 @@ output$tab1 <- renderDataTable({
   n <- min(nrow(df1), nrow(df2))
 
   # replace NA with "" for safe comparison
-  df1_cmp <- dplyr::mutate_all(df1[1:n, ], ~ ifelse(is.na(.), "", .))
-  df2_cmp <- dplyr::mutate_all(df2[1:n, ], ~ ifelse(is.na(.), "", .))
+  #df1_cmp <- dplyr::mutate_all(df1[1:n, ], ~ ifelse(is.na(.), "", .))
+  #df2_cmp <- dplyr::mutate_all(df2[1:n, ], ~ ifelse(is.na(.), "", .))
 
   # row indices where they differ
-  diff_rows <- which(apply(df1_cmp != df2_cmp, 1, any))
+  #diff_rows <- which(apply(df1_cmp != df2_cmp, 1, any))
+  diff_rows <- which(apply(df1 != df2, 1, any))
 
   DT::datatable(
     df1,
@@ -420,12 +427,18 @@ output$tab2 <- renderDataTable({
   req(mig(), segments_rv())
 
   df1 <- mig() |> 
-    mutate(Id = as.integer(Id), Year = as.integer(Year)) |> 
+    mutate(Id = as.integer(Id), 
+           Year = as.integer(Year),
+           Start = ifelse(is.na(Start), "NA", Start),
+           End = ifelse(is.na(End), "NA", End)) |> 
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
   df2 <- segments_rv() |> 
-    mutate(Id = as.integer(Id), Year = as.integer(Year)) |> 
+    mutate(Id = as.integer(Id), 
+           Year = as.integer(Year),
+           Start = ifelse(is.na(Start), "NA", Start),
+           End = ifelse(is.na(End), "NA", End)) |> 
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
@@ -434,9 +447,10 @@ output$tab2 <- renderDataTable({
     diff_rows <- seq_len(nrow(df2))
   } else {
     n <- min(nrow(df1), nrow(df2))
-    df1_cmp <- dplyr::mutate_all(df1[1:n, ], ~ ifelse(is.na(.), "", .))
-    df2_cmp <- dplyr::mutate_all(df2[1:n, ], ~ ifelse(is.na(.), "", .))
-    diff_rows <- which(apply(df1_cmp != df2_cmp, 1, any))
+    #df1_cmp <- dplyr::mutate_all(df1[1:n, ], ~ ifelse(is.na(.), "", .))
+    #df2_cmp <- dplyr::mutate_all(df2[1:n, ], ~ ifelse(is.na(.), "", .))
+    #diff_rows <- which(apply(df1_cmp != df2_cmp, 1, any))
+    diff_rows <- which(apply(df1 != df2, 1, any))
   }
  
   DT::datatable(
@@ -446,11 +460,11 @@ output$tab2 <- renderDataTable({
     options = list(dom = 'tip', scrollX = TRUE, pageLength = nrow(df2)),
     class = "compact"
   ) %>%
-    formatStyle(
-      columns = names(df2),
-      target = "row",
-      backgroundColor = styleEqual(diff_rows, rep("yellow", length(diff_rows)))
-    )
+        formatStyle(
+          columns = names(df2),
+          target = "row",
+          backgroundColor = styleEqual(diff_rows, rep("yellow", length(diff_rows)))
+        )
 })
 
 ```
