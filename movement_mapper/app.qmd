@@ -134,12 +134,6 @@ Boundary <- eventReactive(input$csv1, {
   hr_kde(trk(), levels=0.9999) |> hr_isopleths()
 })
 
-trk_select2 <- reactive({
-  req(input$year)
-  trk <- trk() |> filter(id==input$id, year==input$year)
-  trk |> mutate(nsd=nsd(trk))
-})
-
 trk_select <- reactive({
   req(input$year)
   if (input$extend) {
@@ -229,7 +223,6 @@ oneRow <- reactive({
   end_fall <- as.character(as.Date(input$fall[2]-1, origin = paste0(input$year, "-01-01", format="%b-%d")))
   v <- c(start_spring, end_spring, start_fall, end_fall)
 })
-
 output$tab1a <- renderTable({ 
   if (!is.null(input$csv1)) {
     x <- tibble(
@@ -319,19 +312,6 @@ plotOutput("plotFall")
 
 ```{r}
 #| context: server
-output$plotSpring1 <- renderPlot({
-ggplot(trk_select()) +
-  aes(y = nsd, x = yday, fill = year, text = id) +
-  geom_point(size = 1) + 
-  geom_path(color="black") +
-  geom_vline(xintercept = input$spring[1], color = "red", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = input$spring[2], color = "red", linetype = "dashed", size = 1) +
-  scale_fill_viridis_c("Year") +
-  scale_x_continuous(limits = c(1, last_day())) +
-  theme(legend.position="none") +
-  labs(x = "Day of year", y = "NSD")
-})
-
 output$plotSpring <- renderPlot({
   ggplot(trk_select()) +
     aes(y = nsd, x = plot_yday, fill = year, text = id) +
