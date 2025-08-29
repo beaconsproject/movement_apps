@@ -258,6 +258,7 @@ output$tab1b <- renderTable({
 
 observeEvent(input$log, {
   req(segments_rv())
+  updateActionButton(session, "log", label = "Saved!")
   dat <- segments_rv()
   
   # Decide Start/End values based on checkboxes
@@ -284,6 +285,9 @@ observeEvent(input$log, {
     new_entries,
     by = c("Id", "Year", "Migration")
   ))
+  later::later(function() {
+      updateActionButton(session, "log", label = "Save segments")
+    }, 2)
 })
 ```
 
