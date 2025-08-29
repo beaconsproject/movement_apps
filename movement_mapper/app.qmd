@@ -140,6 +140,7 @@ trk <- eventReactive(input$csv1, {
 })
 
 Boundary <- eventReactive(input$csv1, {
+  req(trk())
   hr_kde(trk(), levels=0.9999) |> hr_isopleths()
 })
 
@@ -233,6 +234,9 @@ oneRow <- reactive({
   v <- c(start_spring, end_spring, start_fall, end_fall)
 })
 output$tab1a <- renderTable({ 
+  req(input$csv1)
+  req(input$id)
+  req(input$year)
   if (!is.null(input$csv1)) {
     x <- tibble(
       Id=c(input$id,input$id),
@@ -245,6 +249,9 @@ output$tab1a <- renderTable({
 })
 
 output$tab1b <- renderTable({ 
+  req(input$csv1)
+  req(input$id)
+  req(input$year)
   if (!is.null(input$csv1)) {
     x <- tibble(
       Id=c(input$id,input$id),
@@ -258,7 +265,9 @@ output$tab1b <- renderTable({
 
 observeEvent(input$log, {
   req(segments_rv())
+  
   updateActionButton(session, "log", label = "Saved!")
+  
   dat <- segments_rv()
   
   # Decide Start/End values based on checkboxes
