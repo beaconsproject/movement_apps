@@ -22,7 +22,6 @@ options(shiny.maxRequestSize=100*1024^2)
 ```{r}
 fileInput("csv1", "Movement data (csv):", accept=".csv")
 fileInput("csv2", "Segments table (csv):", accept=".csv")
-checkboxInput("no_segments", "Create initial segments table", value = FALSE)
 hr()
 selectInput("id", "Select caribou:", choices=NULL)
 selectInput("year", "Select year:", choices=NULL)
@@ -81,9 +80,19 @@ gps <- eventReactive(input$csv1, {
 segments_rv <- reactiveVal(NULL)
 
 mig <- eventReactive(input$csv2, {
-  req(input$csv2)
-  read_csv(input$csv2$datapath)
-})
+  if (is.null(input$csv2)) {
+    tibble::tibble(
+      Id = integer(),
+      Year = integer(),
+      Migration = character(),
+      Start = character(),
+      End = character(),
+      Notes = character()
+    )
+  } else {
+    readr::read_csv(input$csv2$datapath)
+  }
+}, ignoreNULL = FALSE)
 
 # Initialize segments when upload happens
 observeEvent(mig(), {
@@ -270,7 +279,7 @@ observeEvent(input$log, {
   )
 
   # Update existing rows or append
-  segments_rv(dplyr::rows_update(
+  segments_rv(dplyr::rows_upsert(
     dat,
     new_entries,
     by = c("Id", "Year", "Migration")
@@ -353,6 +362,17 @@ output$tab1 <- renderDataTable({
     mutate(` ` = row_number()) |>
     select(` `, everything())
   
+  if (nrow(df1) == 0) {
+    # Return empty datatable if mig() not initialized yet
+    return(DT::datatable(
+      df1,
+      caption = "mig (empty)",
+      rownames = FALSE,
+      options = list(dom = 'tip'),
+      class = "compact"
+    ))
+  }
+  
   df2 <- segments_rv() |> 
     mutate(Id = as.integer(Id), Year = as.integer(Year)) |> 
     mutate(` ` = row_number())  |>
@@ -396,21 +416,21 @@ output$tab2 <- renderDataTable({
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
-  # row counts
-  n <- min(nrow(df1), nrow(df2))
-
-  # replace NA with "" for safe comparison
-  df1_cmp <- dplyr::mutate_all(df1[1:n, ], ~ ifelse(is.na(.), "", .))
-  df2_cmp <- dplyr::mutate_all(df2[1:n, ], ~ ifelse(is.na(.), "", .))
-
-  # row indices where they differ
-  diff_rows <- which(apply(df1_cmp != df2_cmp, 1, any))
-
+  if (nrow(df1) == 0) {
+    # Highlight all rows in df2 if df1 is empty
+    diff_rows <- seq_len(nrow(df2))
+  } else {
+    n <- min(nrow(df1), nrow(df2))
+    df1_cmp <- dplyr::mutate_all(df1[1:n, ], ~ ifelse(is.na(.), "", .))
+    df2_cmp <- dplyr::mutate_all(df2[1:n, ], ~ ifelse(is.na(.), "", .))
+    diff_rows <- which(apply(df1_cmp != df2_cmp, 1, any))
+  }
+ 
   DT::datatable(
     df2,
     caption = "mig",
     rownames = FALSE,
-    options = list(dom = 'tip', scrollX = TRUE, pageLength = n),
+    options = list(dom = 'tip', scrollX = TRUE, pageLength = nrow(df2)),
     class = "compact"
   ) %>%
     formatStyle(
