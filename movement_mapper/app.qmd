@@ -2,6 +2,9 @@
 title: "Movement Mapper"
 format: dashboard
 server: shiny
+execute:
+  daemon: false
+  freeze: false
 ---
 
 ```{r}
@@ -90,7 +93,14 @@ mig <- eventReactive(input$csv2, {
       Notes = character()
     )
   } else {
-    readr::read_csv(input$csv2$datapath)
+    readr::read_csv(input$csv2$datapath, col_types = cols(
+        Id = col_integer(),
+        Year = col_integer(),
+        Migration = col_character(),
+        Start = col_character(),
+        End = col_character(),
+        Notes = col_character()
+      ))
   }
 }, ignoreNULL = FALSE)
 
@@ -270,7 +280,7 @@ output$tab1b <- renderTable({
 
 observeEvent(input$log, {
   req(segments_rv())
-  
+  browser()
   updateActionButton(session, "log", label = "Saved!")
   
   dat <- segments_rv()
@@ -295,6 +305,7 @@ observeEvent(input$log, {
 
   # Update existing rows or append
   segments_rv(dplyr::rows_upsert(
+    
     dat,
     new_entries,
     by = c("Id", "Year", "Migration")
