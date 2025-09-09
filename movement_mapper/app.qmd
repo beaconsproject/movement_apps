@@ -228,6 +228,7 @@ observe({
 ```
 
 ```{r}
+#| context: server
 oneRow <- reactive({
   # Subtracts 1 because DOY 1 corresponds to January 1st
   start_spring <- as.character(as.Date(input$spring[1]-1, origin = paste0(input$year, "-01-01", format="%b-%d")))
