@@ -85,21 +85,21 @@ segments_rv <- reactiveVal(NULL)
 mig <- eventReactive(input$csv2, {
   if (is.null(input$csv2)) {
     tibble::tibble(
-      Id = integer(),
-      Year = integer(),
-      Migration = character(),
-      Start = character(),
-      End = character(),
-      Notes = character()
+      id = integer(),
+      year = integer(),
+      migration = character(),
+      start = character(),
+      end = character(),
+      notes = character()
     )
   } else {
     readr::read_csv(input$csv2$datapath, col_types = cols(
-        Id = col_integer(),
-        Year = col_integer(),
-        Migration = col_character(),
-        Start = col_character(),
-        End = col_character(),
-        Notes = col_character()
+        id = col_integer(),
+        year = col_integer(),
+        migration = col_character(),
+        start = col_character(),
+        end = col_character(),
+        notes = col_character()
       ))
   }
 }, ignoreNULL = FALSE)
@@ -110,35 +110,35 @@ observeEvent(mig(), {
 })
 
 observe({
-  note_spring <- mig()$Notes[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"]
-  note_fall <- mig()$Notes[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"]
+  note_spring <- mig()$notes[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"]
+  note_fall <- mig()$notes[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"]
   updateTextInput(session, "spring_notes", value=note_spring)
   updateTextInput(session, "fall_notes", value=note_fall)
 })
 
 observeEvent(input$csv2, {
-  start_spring <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
-  end_spring <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
-  start_fall <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
-  end_fall <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
+  start_spring <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+  end_spring <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+  start_fall <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+  end_fall <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
   updateSliderInput(session, "spring", min=1, max=365, value=c(start_spring,end_spring), step=1)
   updateSliderInput(session, "fall", min=1, max=365, value=c(start_fall,end_fall), step=1)
 })
 
 observe({
-  start_spring <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
-  end_spring <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
-  start_fall <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
-  end_fall <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
+  start_spring <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+  end_spring <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+  start_fall <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+  end_fall <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
   updateSliderInput(session, "spring", min=1, max=365, value=c(start_spring,end_spring), step=1)
   updateSliderInput(session, "fall", min=1, max=365, value=c(start_fall,end_fall), step=1)
 })
 
 observeEvent(input$extend, {
-  start_spring <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
-  end_spring <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Spring"])
-  start_fall <- yday(mig()$Start[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
-  end_fall <- yday(mig()$End[mig()$Id==input$id & mig()$Year==input$year & mig()$Migration=="Fall"])
+  start_spring <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+  end_spring <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+  start_fall <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+  end_fall <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
   updateSliderInput(session, "spring", min=1, max=426, value=c(start_spring,end_spring), step=1)
   updateSliderInput(session, "fall", min=1, max=426, value=c(start_fall,end_fall), step=1)
 })
@@ -254,11 +254,11 @@ output$tab1a <- renderTable({
   req(input$year)
   if (!is.null(input$csv1)) {
     x <- tibble(
-      Id=c(input$id,input$id),
-      Year=c(input$year,input$year),
-      Migration=c("Spring","Fall"),
-      Start=c(oneRow()[1], oneRow()[3]), 
-      End=c(oneRow()[2], oneRow()[4]))
+      id=c(input$id,input$id),
+      year=c(input$year,input$year),
+      migration=c("Spring","Fall"),
+      start=c(oneRow()[1], oneRow()[3]), 
+      end=c(oneRow()[2], oneRow()[4]))
     x[1,]
   }
 })
@@ -269,11 +269,11 @@ output$tab1b <- renderTable({
   req(input$year)
   if (!is.null(input$csv1)) {
     x <- tibble(
-      Id=c(input$id,input$id),
-      Year=c(input$year,input$year),
-      Migration=c("Spring","Fall"),
-      Start=c(oneRow()[1], oneRow()[3]), 
-      End=c(oneRow()[2], oneRow()[4]))
+      id=c(input$id,input$id),
+      year=c(input$year,input$year),
+      migration=c("Spring","Fall"),
+      start=c(oneRow()[1], oneRow()[3]), 
+      end=c(oneRow()[2], oneRow()[4]))
     x[2,]
   }
 })
@@ -285,19 +285,19 @@ observeEvent(input$log, {
   
   dat <- segments_rv()
   
-  # Decide Start/End values based on checkboxes
+  # Decide start/end values based on checkboxes
   start_spring <- if (isTRUE(input$use_spring)) oneRow()[1] else NA_character_
   end_spring   <- if (isTRUE(input$use_spring)) oneRow()[2] else NA_character_
   start_fall   <- if (isTRUE(input$use_fall)) oneRow()[3] else NA_character_
   end_fall     <- if (isTRUE(input$use_fall)) oneRow()[4] else NA_character_
   
   new_entries <- tibble::tibble(
-    Id        = as.numeric(input$id),
-    Year      = as.numeric(input$year),
-    Migration = c("Spring", "Fall"),
-    Start     = c(start_spring, start_fall),
-    End       = c(end_spring, end_fall),
-    Notes      = c(
+    id        = as.numeric(input$id),
+    year      = as.numeric(input$year),
+    migration = c("Spring", "Fall"),
+    start     = c(start_spring, start_fall),
+    end       = c(end_spring, end_fall),
+    notes      = c(
       ifelse(input$spring_notes == "", NA_character_, input$spring_notes),
       ifelse(input$fall_notes == "", NA_character_, input$fall_notes)
     )
@@ -308,7 +308,7 @@ observeEvent(input$log, {
     
     dat,
     new_entries,
-    by = c("Id", "Year", "Migration")
+    by = c("id", "year", "migration")
   ))
   later::later(function() {
       updateActionButton(session, "log", label = "Save segments")
@@ -357,7 +357,7 @@ output$plotSpring <- renderPlot({
     geom_path(color = "black") +
     geom_vline(xintercept = input$spring[1], color = "red", linetype = "dashed", size = 1) +
     geom_vline(xintercept = input$spring[2], color = "red", linetype = "dashed", size = 1) +
-    scale_fill_viridis_c("Year") +
+    scale_fill_viridis_c("year") +
     scale_x_continuous(limits = c(1, last_day())) +
     theme(legend.position = "none") +
     labs(x = "Day of year (extended)", y = "NSD")
@@ -370,7 +370,7 @@ ggplot(trk_select()) +
   geom_path(color="black") +
   geom_vline(xintercept = input$fall[1], color = "red", linetype = "dashed", size = 1) +
   geom_vline(xintercept = input$fall[2], color = "red", linetype = "dashed", size = 1) +
-  scale_fill_viridis_c("Year") +
+  scale_fill_viridis_c("year") +
   scale_x_continuous(limits = c(1, last_day())) +
   theme(legend.position="none") +
   labs(x = "Day of year", y = "NSD")
@@ -388,10 +388,10 @@ output$tab1 <- renderDataTable({
   req(segments_rv())
 
   df1 <- mig() |> 
-    mutate(Id = as.integer(Id), 
-           Year = as.integer(Year),
-           Start = ifelse(is.na(Start), "NA", Start),
-           End = ifelse(is.na(End), "NA", End)) |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
     mutate(` ` = row_number()) |>
     select(` `, everything())
   
@@ -407,10 +407,10 @@ output$tab1 <- renderDataTable({
   }
   
   df2 <- segments_rv() |> 
-    mutate(Id = as.integer(Id), 
-           Year = as.integer(Year),
-           Start = ifelse(is.na(Start), "NA", Start),
-           End = ifelse(is.na(End), "NA", End)) |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
@@ -450,18 +450,18 @@ output$tab2 <- renderDataTable({
   req(segments_rv())
 
   df1 <- mig() |> 
-    mutate(Id = as.integer(Id), 
-           Year = as.integer(Year),
-           Start = ifelse(is.na(Start), "NA", Start),
-           End = ifelse(is.na(End), "NA", End)) |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
   df2 <- segments_rv() |> 
-    mutate(Id = as.integer(Id), 
-           Year = as.integer(Year),
-           Start = ifelse(is.na(Start), "NA", Start),
-           End = ifelse(is.na(End), "NA", End)) |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
     mutate(` ` = row_number())  |>
     select(` `, everything())
   
@@ -515,4 +515,6 @@ DTOutput("tab1")
 DTOutput("tab2")
 ```
 
+# Help
 
+{{< include help.md >}}
