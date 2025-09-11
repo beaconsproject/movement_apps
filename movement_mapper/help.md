@@ -46,6 +46,7 @@ The segments table provides information on the start and end dates for migration
 
 3. Define segments using sliders
 
+- The two plots on the right show the relationship between NSD and "Day of year", and are the key to identifying movement segments. NSD calculates the net squared displacement (i.e., the squared distance from the first location of a track) for a track.
 - Use the Spring and Fall sliders to define start and end dates.
 - Click on the "Save segments" button after defining segments for each Id/Year combination.
 

@@ -32,14 +32,6 @@ checkboxInput("extend", "Extend fall season into next year", value = FALSE)
 textInput("spring_notes", "Spring notes:", value=NULL)
 textInput("fall_notes", "Fall notes:", value=NULL)
 hr()
-```
-
-**NSD vs Time plots**
-
-The two plots on the right show the relationship between NSD and "Day of year". NSD calculates the net squared displacement (i.e., the squared distance from the first location of a track) for a track.
-
-```{r}
-hr()
 actionButton("log", "Save segments")
 br()
 hr()
