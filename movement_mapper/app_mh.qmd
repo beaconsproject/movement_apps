@@ -1,0 +1,550 @@
+--- 
+title: "Movement Mapper"
+format: dashboard
+server: shiny
+execute:
+  echo: false
+  freeze: false
+---
+
+```{r}
+#| context: setup
+library(sf)
+library(amt)
+library(bslib)
+library(leaflet)
+library(tidyverse)
+library(DT)
+options(shiny.maxRequestSize=100*1024^2) 
+```
+
+## {.sidebar}
+
+**Upload data**
+
+```{r}
+fileInput("csv1", "Movement data (csv):", accept=".csv")
+fileInput("csv2", "Segments table (csv):", accept=".csv")
+hr()
+selectInput("id", "Select caribou:", choices=NULL)
+selectInput("year", "Select year:", choices=NULL)
+checkboxInput("extend", "Extend fall season into next year", value = FALSE)
+textInput("spring_notes", "Spring notes:", value=NULL)
+textInput("fall_notes", "Fall notes:", value=NULL)
+hr()
+actionButton("log", "Save segments")
+br()
+hr()
+downloadButton("save", "Download final segments")
+```
+
+# Plots {orientation="columns" scrolling="true"}
+
+## Column {width=30%}
+
+### Row {height="50%"}
+
+```{r}
+tableOutput("tab1a")
+leafletOutput("map1")
+```
+
+### Row {height="50%"}
+
+```{r}
+tableOutput("tab1b")
+leafletOutput("map2")
+```
+
+```{r} 
+#| context: server
+observeEvent(input$csv1, {
+  ids <- as.character(sort(unique(gps()$id)))
+  yrs <- as.character(sort(unique(gps()$year)))
+  updateSelectInput(session, "id", choices=ids, selected=ids[1])
+  updateSelectInput(session, "year", choices=yrs, selected=yrs[1])
+})
+
+
+gps <- eventReactive(input$csv1, {
+  req(input$csv1)
+  read_csv(input$csv1$datapath) |>
+    mutate(year = year(timestamp), yday=yday(timestamp)) # |> filter(id %in% 43140:43146)
+})
+
+segments_rv <- reactiveVal(NULL)
+
+mig <- eventReactive(input$csv2, {
+  if (is.null(input$csv2)) {
+    tibble::tibble(
+      id = integer(),
+      year = integer(),
+      migration = character(),
+      start = character(),
+      end = character(),
+      notes = character()
+    )
+  } else {
+    readr::read_csv(input$csv2$datapath, col_types = cols(
+        id = col_integer(),
+        year = col_integer(),
+        migration = col_character(),
+        start = col_character(),
+        end = col_character(),
+        notes = col_character()
+      ))
+  }
+}, ignoreNULL = FALSE)
+
+# Initialize segments when upload happens
+#observeEvent(mig(), {
+#  segments_rv(mig())
+#})
+observeEvent(mig(), {
+    mig <- mig() |>
+      mutate(start_yday = if_else(year(ymd(start)) == year, yday(ymd(start)), yday(ymd(start)) + 365),
+             end_yday = if_else(year(ymd(end)) == year, yday(ymd(end)), yday(ymd(end)) + 365))
+    segments_rv(mig)
+})
+
+observe({
+  note_spring <- mig()$notes[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"]
+  note_fall <- mig()$notes[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"]
+  updateTextInput(session, "spring_notes", value=note_spring)
+  updateTextInput(session, "fall_notes", value=note_fall)
+})
+
+#observeEvent(input$csv2, {
+#  start_spring <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+#  end_spring <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+#  start_fall <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+#  end_fall <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+#  updateSliderInput(session, "spring", min=1, max=365, value=c(start_spring,end_spring), step=1)
+#  updateSliderInput(session, "fall", min=1, max=365, value=c(start_fall,end_fall), step=1)
+#})
+observeEvent(input$csv2, {
+  start_spring <- segments_rv()$start_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Spring"]
+  end_spring <- segments_rv()$end_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Spring"]
+  start_fall <- segments_rv()$start_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Fall"]
+  end_fall <- segments_rv()$end_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Fall"]
+  updateSliderInput(session, "spring", min=1, max=365, value=c(start_spring,end_spring), step=1)
+  updateSliderInput(session, "fall", min=1, max=if (isTRUE(end_fall > 365)) end_fall else 365, value=c(start_fall,end_fall), step=1)
+})
+  
+#observe({
+#  start_spring <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+#  end_spring <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+#  start_fall <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+#  end_fall <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+#  updateSliderInput(session, "spring", min=1, max=365, value=c(start_spring,end_spring), step=1)
+#  updateSliderInput(session, "fall", min=1, max=365, value=c(start_fall,end_fall), step=1)
+#})
+observeEvent(list(input$id, input$year),{
+  req(trk_select())
+  start_spring <- segments_rv()$start_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Spring"]
+  end_spring <- segments_rv()$end_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Spring"]
+  start_fall <- segments_rv()$start_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Fall"]
+  end_fall <- segments_rv()$end_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Fall"]
+  updateSliderInput(session, "spring", min=1, max=365, value=c(start_spring,end_spring), step=1)
+  updateSliderInput(session, "fall", min=1, max=if (isTRUE(end_fall > 365)) end_fall else 365, value=c(start_fall,end_fall), step=1)
+})
+  
+observeEvent(input$fall, {
+  if(input$fall[2] > 365){
+    updateCheckboxInput(session, "extend", label = NULL, value = TRUE)
+  }
+}) 
+
+#observeEvent(input$extend, {
+#  start_spring <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+#  end_spring <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Spring"])
+#  start_fall <- yday(mig()$start[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+#  end_fall <- yday(mig()$end[mig()$id==input$id & mig()$year==input$year & mig()$migration=="Fall"])
+#  updateSliderInput(session, "spring", min=1, max=426, value=c(start_spring,end_spring), step=1)
+#  updateSliderInput(session, "fall", min=1, max=426, value=c(start_fall,end_fall), step=1)
+#})
+observeEvent(input$extend, {
+  start_spring <- segments_rv()$start_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Spring"]
+  end_spring <- segments_rv()$end_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Spring"]
+  start_fall <- segments_rv()$start_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Fall"]
+  end_fall <- segments_rv()$end_yday[segments_rv()$id==input$id & segments_rv()$year==input$year & segments_rv()$migration=="Fall"]
+  updateSliderInput(session, "spring", min=1, max=426, value=c(start_spring,end_spring), step=1)
+  updateSliderInput(session, "fall", min=1, max=426, value=c(start_fall,end_fall), step=1)
+})
+
+trk <- eventReactive(input$csv1, {
+  gps() |>
+    make_track(.x=longitude, .y=latitude, .t=timestamp, id=id, longitude=longitude, 
+      latitude=latitude, elevation=elevation, year=year, yday=yday, crs = 4326) 
+})
+
+Boundary <- eventReactive(input$csv1, {
+  req(trk())
+  hr_kde(trk(), levels=0.9999) |> hr_isopleths()
+})
+
+trk_select <- reactive({
+  req(input$year)
+  if (input$extend) {
+    # keep selected year + next year
+    trk <- trk() |> 
+      filter(id==input$id, year %in% c(as.numeric(input$year), as.numeric(input$year) + 1))
+  } else {
+    # keep only selected year
+    trk <- trk() |> 
+      filter(id==input$id, year == input$year)
+  }
+
+  trk <- trk |> 
+    arrange("t_") |> 
+    mutate(plot_yday = ifelse(year != input$year, yday + 365, yday)) |> 
+      filter(plot_yday < 427)
+  trk <- trk |> mutate(nsd=nsd(trk))
+  trk
+})
+
+last_day <- reactive(ifelse(input$extend, 426, 365))
+
+# Initialize spring map 
+output$map1 <- renderLeaflet({
+  leaflet(Boundary(), options = leafletOptions(attributionControl = FALSE)) |>
+    addProviderTiles("Esri.WorldImagery", group="Esri.WorldImagery") |>
+    addProviderTiles("Esri.WorldGrayCanvas", group="Esri.WorldGrayCanvas") |>
+    addProviderTiles("Esri.WorldTopoMap", group="Esri.WorldTopoMap") |>
+    addPolygons(fillOpacity=0, stroke=TRUE, color="black", weight=2, group="Boundary") |>
+    addLayersControl(
+      position = "topright",
+      baseGroups = c("Esri.WorldTopoMap", "Esri.WorldImagery", "Esri.WorldGrayCanvas"),
+      overlayGroups = c("Boundary", "GPS", "GPS Spring", "Tracks"),
+      options = layersControlOptions(collapsed = TRUE)
+    )
+})
+
+# Update the spring layers
+observe({
+  req(trk_select())
+  lines <- trk_select()
+  spring <- lines |> filter(plot_yday >= input$spring[1] & plot_yday <= input$spring[2])
+  leafletProxy("map1") |>
+    clearGroup("GPS") |>
+    clearGroup("GPS Spring") |>
+    clearGroup("Tracks") |>
+    addCircles(data = lines, ~x_, ~y_, color="black", fill="black", weight=1, radius=1, group="GPS") |>
+    addCircles(data = spring, ~x_, ~y_, color="red", fill="red", weight=10, radius=10, group="GPS Spring") |>
+    addPolylines(data = lines, ~x_, ~y_, stroke=TRUE, color="black", weight=1, group="Tracks")
+})
+
+
+# Initialize fall map 
+output$map2 <- renderLeaflet({
+  leaflet(Boundary(), options = leafletOptions(attributionControl = FALSE)) |>
+    addProviderTiles("Esri.WorldImagery", group="Esri.WorldImagery") |>
+    addProviderTiles("Esri.WorldGrayCanvas", group="Esri.WorldGrayCanvas") |>
+    addProviderTiles("Esri.WorldTopoMap", group="Esri.WorldTopoMap") |>
+    addPolygons(fillOpacity=0, stroke=TRUE, color="black", weight=2, group="Boundary") |>
+    addLayersControl(
+      position = "topright",
+      baseGroups = c("Esri.WorldTopoMap", "Esri.WorldImagery", "Esri.WorldGrayCanvas"),
+      overlayGroups = c("Boundary", "GPS", "GPS Fall", "Tracks"),
+      options = layersControlOptions(collapsed = TRUE)
+    )
+})
+
+# Update the fall layers
+observe({
+  req(trk_select())
+  lines <- trk_select()
+  fall   <- lines |> filter(plot_yday >= input$fall[1] & plot_yday <= input$fall[2])
+  leafletProxy("map2") |>
+    clearGroup("GPS") |>
+    clearGroup("GPS Fall") |>
+    clearGroup("Tracks") |>
+    addCircles(data = lines, ~x_, ~y_, color="black", fill="black", weight=1, radius=1, group="GPS") |>
+    addCircles(data = fall, ~x_, ~y_, color="red", fill="red", weight=10, radius=10, group="GPS Fall") |>
+    addPolylines(data = lines, ~x_, ~y_, stroke=TRUE, color="black", weight=1, group="Tracks")
+})
+
+```
+
+```{r}
+#| context: server
+oneRow <- reactive({
+  # Subtracts 1 because DOY 1 corresponds to January 1st
+  start_spring <- as.character(as.Date(input$spring[1]-1, origin = paste0(input$year, "-01-01", format="%b-%d")))
+  end_spring <- as.character(as.Date(input$spring[2]-1, origin = paste0(input$year, "-01-01", format="%b-%d")))
+  start_fall <- as.character(as.Date(input$fall[1]-1, origin = paste0(input$year, "-01-01", format="%b-%d")))
+  end_fall <- as.character(as.Date(input$fall[2]-1, origin = paste0(input$year, "-01-01", format="%b-%d")))
+  v <- c(start_spring, end_spring, start_fall, end_fall)
+})
+
+output$tab1a <- renderTable({ 
+  req(input$csv1)
+  req(input$id)
+  req(input$year)
+  if (!is.null(input$csv1)) {
+    x <- tibble(
+      id=c(input$id,input$id),
+      year=c(input$year,input$year),
+      migration=c("Spring","Fall"),
+      start=c(oneRow()[1], oneRow()[3]), 
+      end=c(oneRow()[2], oneRow()[4]))
+    x[1,]
+  }
+})
+
+output$tab1b <- renderTable({ 
+  req(input$csv1)
+  req(input$id)
+  req(input$year)
+  if (!is.null(input$csv1)) {
+    x <- tibble(
+      id=c(input$id,input$id),
+      year=c(input$year,input$year),
+      migration=c("Spring","Fall"),
+      start=c(oneRow()[1], oneRow()[3]), 
+      end=c(oneRow()[2], oneRow()[4]))
+    x[2,]
+  }
+})
+
+observeEvent(input$log, {
+  req(segments_rv())
+  browser()
+  updateActionButton(session, "log", label = "Saved!")
+  
+  dat <- segments_rv()
+  
+  # Decide start/end values based on checkboxes
+  start_spring <- if (isTRUE(input$use_spring)) oneRow()[1] else NA_character_
+  end_spring   <- if (isTRUE(input$use_spring)) oneRow()[2] else NA_character_
+  start_fall   <- if (isTRUE(input$use_fall)) oneRow()[3] else NA_character_
+  end_fall     <- if (isTRUE(input$use_fall)) oneRow()[4] else NA_character_
+  
+  new_entries <- tibble::tibble(
+    id        = as.numeric(input$id),
+    year      = as.numeric(input$year),
+    migration = c("Spring", "Fall"),
+    start     = c(start_spring, start_fall),
+    end       = c(end_spring, end_fall),
+    notes      = c(
+      ifelse(input$spring_notes == "", NA_character_, input$spring_notes),
+      ifelse(input$fall_notes == "", NA_character_, input$fall_notes)
+    )
+  )
+
+  # Update existing rows or append
+  segments_rv(dplyr::rows_upsert(
+    dat,
+    new_entries,
+    by = c("id", "year", "migration")
+  ))
+  later::later(function() {
+      updateActionButton(session, "log", label = "Save segments")
+    }, 2)
+})
+```
+
+```{r}
+#| context: server
+# download the *latest* tibble
+output$save <- downloadHandler(
+  filename = function() {
+    paste0("migration_segments_", Sys.Date(), ".csv")
+  },
+  content = function(file) {
+    req(segments_rv())
+    segments <- segments_rv() |>
+      select(id,	year,	migration,	start,	end,	notes)
+    write_csv(segments, file)
+  }
+)
+```
+
+## Column {width=70%}
+
+### Row {height="50%"}
+
+```{r}
+checkboxInput("use_spring", "Spring migration:", value = TRUE)
+sliderInput("spring", " ", min=1, max=365, value=c(91,181), step=1, width="100%")
+plotOutput("plotSpring")
+```
+
+### Row {height="50%"}
+
+```{r}
+checkboxInput("use_fall", "Fall migration:", value = TRUE)
+sliderInput("fall", " ", min=1, max=365, value=c(244,304), step=1, width="100%")
+plotOutput("plotFall")
+```
+
+```{r}
+#| context: server
+output$plotSpring <- renderPlot({
+  ggplot(trk_select()) +
+    aes(y = nsd, x = plot_yday, fill = year, text = id) +
+    geom_point(size = 1) + 
+    geom_path(color = "black") +
+    geom_vline(xintercept = input$spring[1], color = "red", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = input$spring[2], color = "red", linetype = "dashed", size = 1) +
+    scale_fill_viridis_c("year") +
+    scale_x_continuous(limits = c(1, last_day())) +
+    theme(legend.position = "none") +
+    labs(x = "Day of year", y = "NSD")
+})
+
+output$plotFall <- renderPlot({
+ggplot(trk_select()) +
+  aes(y = nsd, x = plot_yday, fill = year, text = id) +
+  geom_point(size = 1) + 
+  geom_path(color="black") +
+  geom_vline(xintercept = input$fall[1], color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = input$fall[2], color = "red", linetype = "dashed", size = 1) +
+  scale_fill_viridis_c("year") +
+  scale_x_continuous(limits = c(1, last_day())) +
+  theme(legend.position="none") +
+  labs(x = "Day of year", y = "NSD")
+})
+```
+
+# Tables
+
+## Column {width=50%}
+
+```{r}
+#| context: server
+output$tab1 <- renderDataTable({
+  req(mig())
+  req(segments_rv())
+
+  df1 <- mig() |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
+    mutate(` ` = row_number()) |>
+    select(` `, everything())
+  
+  if (nrow(df1) == 0) {
+    # Return empty datatable if mig() not initialized 
+    return(DT::datatable(
+      df1,
+      caption = "Table empty",
+      rownames = FALSE,
+      options = list(dom = 'tip'),
+      class = "compact"
+    ))
+  }
+  
+  df2 <- segments_rv() |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
+    mutate(` ` = row_number())  |>
+    select(` `, id,  year, migration, start, end, notes)
+  
+  # row counts
+  n <- min(nrow(df1), nrow(df2))
+
+  # row indices where they differ
+  diff_rows <- which(apply(df1 != df2, 1, any))
+
+  if(length(diff_rows)==0){
+    return(DT::datatable(
+      df1,
+      caption = "",
+      rownames = FALSE,
+      options = list(dom = 'tip'),
+      class = "compact"
+    ))
+  }else{
+     return(DT::datatable(df1,
+    caption = "",
+    rownames = FALSE,
+    options = list(dom = 'tip', scrollX = TRUE, pageLength = n),
+    class = "compact"
+  ) |>
+    formatStyle(
+      columns = names(df1),
+      target = "row",
+      backgroundColor = styleEqual(diff_rows, rep("yellow", length(diff_rows)))
+    )
+   )
+  }
+})
+
+# Table 2
+output$tab2 <- renderDataTable({
+  req(mig())
+  req(segments_rv())
+
+  df1 <- mig() |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
+    mutate(` ` = row_number())  |>
+    select(` `, everything())
+  
+  df2 <- segments_rv() |> 
+    mutate(id = as.integer(id), 
+           year = as.integer(year),
+           start = ifelse(is.na(start), "NA", start),
+           end = ifelse(is.na(end), "NA", end)) |> 
+    mutate(` ` = row_number())  |>
+    select(` `, id,  year, migration, start, end, notes)
+  
+  if (nrow(df1) == 0) {
+    return(DT::datatable(
+      df2,
+      caption = "",
+      rownames = FALSE,
+      options = list(dom = 'tip'),
+      class = "compact"
+    ))
+  } else {
+    n <- min(nrow(df1), nrow(df2))
+    diff_rows <- which(apply(df1 != df2, 1, any))
+    
+    if(length(diff_rows)==0){
+      return(DT::datatable(
+      df2,
+      caption = "",
+      rownames = FALSE,
+      options = list(dom = 'tip'),
+      class = "compact"
+    ))
+    } else {
+      return(DT::datatable(
+        df2,
+        caption = "",
+        rownames = FALSE,
+        options = list(dom = 'tip', scrollX = TRUE, pageLength = nrow(df2)),
+        class = "compact"
+        ) |>
+        formatStyle(
+          columns = names(df2),
+          target = "row",
+          backgroundColor = styleEqual(diff_rows, rep("yellow", length(diff_rows)))
+        )
+      )
+    }
+  }
+})
+
+```
+
+```{r}
+#| title: Original
+DTOutput("tab1")
+```
+
+```{r}
+#| title: Revised
+DTOutput("tab2")
+```
+
+# Help
+
+{{< include help.md >}}
