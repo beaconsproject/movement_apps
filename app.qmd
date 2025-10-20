@@ -36,6 +36,8 @@ actionButton("log", "Save segments")
 br()
 hr()
 downloadButton("save", "Download final segments")
+br()
+downloadButton("save2", "Download GPS + segments")
 ```
 
 # Plots {orientation="columns" scrolling="true"}
@@ -356,6 +358,76 @@ output$save <- downloadHandler(
     segments <- segments_rv() |>
       select(id,	year,	migration,	start,	end,	notes)
     write_csv(segments, file)
+  }
+)
+
+# merge segments with movement data and download
+output$save2 <- downloadHandler(
+  filename = function() {
+    paste0("movement_data_", Sys.Date(), ".csv")
+  },
+  content = function(file) {
+    req(segments_rv())
+    x <- segments_rv() |>
+      select(id, year, migration, start, end) |>
+      filter(migration %in% c("Spring", "Fall")) |>
+      mutate(start=as.Date(start), end=as.Date(end))
+
+    xw <- x |>
+      pivot_wider(names_from = migration, values_from = c(start, end)) |>
+        mutate(start_Summer="", end_Summer="", start_Winter="", end_Winter="") |>
+        select(id, year, start_Spring, end_Spring, start_Summer, end_Summer, start_Fall, end_Fall, start_Winter, end_Winter) |>
+        rename(Spring_start=start_Spring, Spring_end=end_Spring, Summer_start=start_Summer, Summer_end=end_Summer,
+               Fall_start=start_Fall, Fall_end=end_Fall, Winter_start=start_Winter, Winter_end=end_Winter)
+
+    xw <- xw |> 
+      mutate(
+        Summer_start = Spring_end + 1,
+        Summer_end = Fall_start - 1,
+        Winter_start = Fall_end + 1,
+        Winter_end = Spring_start - 1
+        )
+
+    for (i in 1:nrow(xw)) {
+      xw$Winter_end[i] <- xw$Winter_end[i+1]
+      if (is.na(xw$Summer_start[i])) { xw$Summer_end[i] <- NA }
+      if (is.na(xw$Summer_end[i])) { xw$Summer_start[i] <- NA }
+      if (is.na(xw$Winter_end[i])) { xw$Winter_start[i] <- NA }
+    }
+
+    xl <- xw |> pivot_longer(
+        cols = c("Spring_start","Spring_end","Summer_start","Summer_end","Fall_start","Fall_end","Winter_start","Winter_end"),
+        names_to = c("season",".value"),
+        names_sep = "_") |>
+      mutate(season=ifelse(season=="Spring", "Spring migration", season),
+             season=ifelse(season=="Fall", "Fall migration", season),
+             season=ifelse(season=="Summer", "Summer range", season),
+             season=ifelse(season=="Winter", "Winter range", season))
+
+    #xl <- xl[1:25,]
+    y <- gps() |> mutate(season="", migration="")
+    for (i in 1:nrow(xl)) {
+      #cat(i, xl$id[i], xl$year[i], xl$start[i], xl$start[i], xl$season[i], "\n"); flush.console()
+      if (xl$season[i] %in% c("Summer range","Winter range")) {
+        if (!is.na(xl$start[i]) | !is.na(xl$end[i])) {
+          y <- y |> mutate(season=ifelse(id==xl$id[i] & date>=xl$start[i] & date<=xl$end[i], xl$season[i], season))
+        }
+      } else if (xl$season[i] %in% c("Spring migration", "Fall migration")) {
+        if (!is.na(xl$start[i]) | !is.na(xl$end[i])) {
+          y <- y |> mutate(migration=ifelse(id==xl$id[i] & date>=xl$start[i] & date<=xl$end[i], xl$season[i], migration))
+        }
+      }
+      #print(y[,c("id","date","season","migration")])
+      #print(table(y$season))
+    }
+    #print(xl)
+    #print(y[1:5, c("id","date","season","migration")])
+    print(table(y$season))
+    print(table(y$migration))
+    #print(table(y$year, y$season))
+    #print(table(y$year, y$migration))
+
+    write_csv(y, file)
   }
 )
 ```
